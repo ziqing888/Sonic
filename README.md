@@ -25,7 +25,7 @@ Sonic Odyssey 机器人
 ## 设置
 
 - 运行 `git clone https://github.com/ziqing888/Sonic.git`
-- 运行 `cd Sonic-Odyssey-Bot`
+- 运行 `cd Sonic`
 - 运行 `npm install`
 - 运行 `cp account_tmp.js account.js && cp proxy_list_tmp.js proxy_list.js` 
 - 编辑 `account.js` 文件 `nano account.js`，填入您的账户私钥
