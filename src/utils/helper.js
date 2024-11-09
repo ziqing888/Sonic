@@ -1,6 +1,6 @@
 import bs58 from "bs58";
 import twist from "./twist.js";
-import { Fore, Style } from "chalk"; // 使用chalk模块来实现颜色（假设您使用chalk）
+import chalk from "chalk"; // 默认导入 chalk 模块
 
 // Helper 类
 export class Helper {
@@ -89,11 +89,12 @@ export class Helper {
   // 显示自定义 ASCII 艺术 Logo
   static showSkelLogo() {
     console.log(`
-      ${Fore.YELLOW}╔════════════════════════════════════════╗
-      ${Fore.YELLOW}║      🚀  Sonic-Odyssey-Bot 🚀          ║
-      ${Fore.YELLOW}║  👤    脚本编写：@qklxsqf              ║
-      ${Fore.YELLOW}║  📢  电报频道：https://t.me/ksqxszq    ║
-      ${Fore.YELLOW}╚════════════════════════════════════════╝${Style.RESET_ALL}
+      ${chalk.yellow('╔════════════════════════════════════════╗')}
+      ${chalk.yellow('║      🚀  hanafuda自动工具 🚀           ║')}
+      ${chalk.yellow('║  👤    脚本编写：@qklxsqf              ║')}
+      ${chalk.yellow('║  📢  电报频道：https://t.me/ksqxszq    ║')}
+      ${chalk.yellow('╚════════════════════════════════════════╝')}${chalk.reset()}
     `);
   }
 }
+
