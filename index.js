@@ -139,7 +139,7 @@ async function startBot() {
 
     // 自定义 LOGO
     console.log(`\x1b[33m╔════════════════════════════════════════╗`);
-    console.log(`\x1b[33m║      🚀 Sonic 奥德赛机器人 🚀         ║`);
+    console.log(`\x1b[33m║      🚀 SONIC ODYSSEY 机器人 🚀       ║`);
     console.log(`\x1b[33m║  👤    脚本编写：@qklxsqf              ║`);
     console.log(`\x1b[33m║  📢  电报频道：https://t.me/ksqxszq    ║`);
     console.log(`\x1b[33m╚════════════════════════════════════════╝\x1b[0m`);
