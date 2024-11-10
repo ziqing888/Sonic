@@ -90,7 +90,7 @@ export class Helper {
   static showSkelLogo() {
     console.log(`
       ${chalk.yellow('╔════════════════════════════════════════╗')}
-      ${chalk.yellow('║      🚀 Sonic 奥德赛 机器人🚀         ║')}
+      ${chalk.yellow('║      🚀 SONIC ODYSSEY 机器人🚀        ║')}
       ${chalk.yellow('║  👤    脚本编写：@qklxsqf              ║')}
       ${chalk.yellow('║  📢  电报频道：https://t.me/ksqxszq    ║')}
       ${chalk.yellow('╚════════════════════════════════════════╝')}${chalk.reset()}
