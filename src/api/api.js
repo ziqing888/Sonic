@@ -8,12 +8,8 @@ export class API {
   constructor(url, proxy) {
     this.url = url; // 基础 URL
     this.ua = Helper.randomUserAgent(); // 随机生成的用户代理
-    this.proxy = this.proxy; // 代理服务器地址
-    if (this.proxy) {
-      this.agent = new HttpsProxyAgent(this.proxy); // 如果设置了代理，则创建代理代理对象
-    } else {
-      this.agent = undefined;
-    }
+    this.proxy = proxy; // 代理服务器地址
+    this.agent = this.proxy ? new HttpsProxyAgent(this.proxy) : undefined; // 创建代理对象
   }
 
   // 生成请求头
@@ -25,10 +21,9 @@ export class API {
       "User-Agent": this.ua, // 用户代理
     };
 
-    if (this.token) {
+    if (token) {
       headers.Authorization = token; // 如果有令牌，则添加到请求头
     }
-    // console.log(headers);
     return headers;
   }
 
@@ -43,7 +38,7 @@ export class API {
     customUrl = undefined
   ) {
     try {
-      const url = `${customUrl == undefined ? this.url : customUrl}${endpoint}`;
+      const url = `${customUrl === undefined ? this.url : customUrl}${endpoint}`;
       let headers = this.generateHeaders(token);
       headers = Object.assign(headers, additionalHeader); // 合并请求头
       const options = {
@@ -58,25 +53,24 @@ export class API {
         referrerPolicy: "strict-origin-when-cross-origin",
       };
 
-      if (method !== "GET") {
-        options.body = `${JSON.stringify(body)}`; // 如果不是 GET 请求，则设置请求体
+      if (method !== "GET" && Object.keys(body).length > 0) {
+        options.body = JSON.stringify(body); // 如果不是 GET 请求且 body 不为空，则设置请求体
       }
 
       logger.info(`${method} : ${url}`);
-      logger.info(`请求头 : ${JSON.stringify(headers)}`);
-      logger.info(`请求体 : ${JSON.stringify(body)}`);
+      logger.debug(`请求头 : ${JSON.stringify(headers)}`);
+      logger.debug(`请求体 : ${JSON.stringify(body)}`);
 
       const res = await fetch(url, options);
 
       logger.info(`响应 : ${res.status} ${res.statusText}`);
-      logger.info(``);
 
-      if (res.ok || res.status == 400) {
+      if (res.ok || res.status === 400) {
         const data = await res.json();
-        logger.info(`响应数据 : ${JSON.stringify(data)}`);
+        logger.debug(`响应数据 : ${JSON.stringify(data)}`);
         return data;
       } else {
-        throw new Error(res.statusText);
+        throw new Error(`请求失败: ${res.status} ${res.statusText} (URL: ${url})`);
       }
     } catch (err) {
       logger.error(`错误 : ${err.message}`);
