@@ -119,7 +119,7 @@ async function startBot() {
 function printLogo() {
   const logo = `
 \x1b[33m╔════════════════════════════════════════╗
-\x1b[33m║      🚀  hanafuda自动工具 🚀           ║
+\x1b[33m║      🚀  索尼克--机器人 🚀             ║
 \x1b[33m║  👤    脚本编写：@qklxsqf              ║
 \x1b[33m║  📢  电报频道：https://t.me/ksqxszq    ║
 \x1b[33m╚════════════════════════════════════════╝\x1b[0m
