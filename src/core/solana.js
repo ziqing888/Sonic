@@ -13,12 +13,6 @@ import nacl from "tweetnacl";
 import { API } from "../api/api.js";
 import logger from "../utils/logger.js";
 
-// 常量配置
-const DELAY_MS = 1000;
-const RETRY_DELAY_MS = 2000;
-const MAX_RETRIES = 3;
-
-// Solana 类
 export class Solana extends API {
   constructor(pk, proxy) {
     const apiUrl = "https://odyssey-api-beta.sonic.game";
@@ -33,212 +27,383 @@ export class Solana extends API {
     );
   }
 
-  // 错误处理
-  handleError(err, context) {
-    logger.error(`${context} 发生错误: ${err.message}`);
-    throw err;
-  }
-
-  // 重试逻辑
-  async retry(fn, retries = MAX_RETRIES, delayMs = RETRY_DELAY_MS, context = "") {
-    let attempts = 0;
-    while (attempts < retries) {
-      try {
-        return await fn();
-      } catch (err) {
-        attempts++;
-        logger.error(`重试失败 (${attempts}/${retries}): ${context}`);
-        if (attempts >= retries) {
-          throw new Error(`最大重试次数已达到: ${context}`);
-        }
-        await Helper.delay(delayMs);
-      }
-    }
-  }
-
-  // 获取 Token
-  async getToken() {
-    if (!this.token) {
-      await this.connect();
-    }
-    return this.token;
-  }
-
-  // 连接钱包
   async connectWallet() {
     try {
       const privateKeyBuffer = Helper.base58decoder(this.pk);
+      /** @type {Keypair} */
       this.wallet = Keypair.fromSecretKey(privateKeyBuffer);
+      /** @type {PublicKey} */
       this.address = new PublicKey(this.wallet.publicKey.toBase58());
     } catch (error) {
-      this.handleError(error, "连接钱包");
+      throw error;
     }
   }
 
-  // 连接到 Sonic Odyssey
   async connect() {
-    try {
-      logger.info(`连接到 Sonic Odyssey`);
-      const challengeResponse = await this.fetch(
-        `/testnet-v1/auth/sonic/challenge?wallet=${this.address}`,
-        "GET",
-        undefined,
-        null,
-        "omit"
-      );
-      const message = challengeResponse.data;
-      const messageBytes = new TextEncoder().encode(message);
-      const signature = nacl.sign.detached(messageBytes, this.wallet.secretKey);
-      const signatureBase64 = Buffer.from(signature).toString("base64");
-      const addressEncoded = Buffer.from(this.wallet.publicKey.toBytes()).toString("base64");
-
-      const authResponse = await this.fetch(
-        `/testnet-v1/auth/sonic/authorize`,
-        "POST",
-        undefined,
-        {
+    logger.info(`Connecting to Sonic Odyssey`);
+    await this.fetch(
+      `/testnet-v1/auth/sonic/challenge?wallet=${this.address}`,
+      "GET",
+      undefined,
+      null,
+      "omit"
+    )
+      .then(async (challangeRes) => {
+        const message = challangeRes.data;
+        const messageBytes = new TextEncoder().encode(message);
+        const signature = nacl.sign.detached(
+          messageBytes,
+          this.wallet.secretKey
+        );
+        const signatureBase64 = Buffer.from(signature).toString("base64");
+        const addressEncoded = Buffer.from(
+          this.wallet.publicKey.toBytes()
+        ).toString("base64");
+        const requestBody = {
           address: this.address.toBase58(),
           address_encoded: addressEncoded,
           signature: signatureBase64,
-        },
-        "omit"
-      );
+        };
 
-      if (authResponse.code === 0) {
-        this.token = authResponse.data.token;
-        logger.info(`成功连接到 Sonic Odyssey`);
-        await Helper.delay(DELAY_MS, this.pk, `已成功连接到 Sonic Odyssey`, this);
-      } else {
-        throw new Error(authResponse.message);
-      }
-    } catch (err) {
-      this.handleError(err, "连接到 Sonic Odyssey");
-    }
+        await this.fetch(
+          `/testnet-v1/auth/sonic/authorize`,
+          "POST",
+          undefined,
+          requestBody,
+          "omit"
+        )
+          .then(async (authorizeRes) => {
+            if (authorizeRes.code == 0) {
+              this.token = authorizeRes.data.token;
+              logger.info(`Connected to Sonic Odyssey`);
+              await Helper.delay(
+                1000,
+                this.pk,
+                `Connected to Sonic Odyssey`,
+                this
+              );
+            } else {
+              throw new Error(authorizeRes.message);
+            }
+          })
+          .catch((err) => {
+            throw err;
+          });
+      })
+      .catch((err) => {
+        throw err;
+      });
   }
 
-  // 检查余额
   async checkBalance() {
     try {
       this.balance =
         (await this.connection.getBalance(this.address)) / LAMPORTS_PER_SOL;
-      logger.info(`当前余额: ${this.balance} SOL`);
     } catch (error) {
-      this.handleError(error, "检查余额");
+      throw error;
     }
   }
 
-  // 获取奖励信息
-  async getRewardInfo() {
+  /** @param {Transaction} trans */
+  async doTx(trans) {
     try {
-      logger.info(`获取奖励信息`);
-      const data = await this.fetch("/testnet-v1/user/rewards/info", "GET", await this.getToken());
-
-      if (data.code === 0) {
-        this.reward = data.data;
-        logger.info(`成功获取奖励信息: ${JSON.stringify(this.reward)}`);
-      } else {
-        throw new Error(`无法获取奖励信息: ${data.message}`);
-      }
-    } catch (error) {
-      this.handleError(error, "获取奖励信息");
-    }
-  }
-
-  // 获取每日交易信息
-  async getDailyTx() {
-    try {
-      logger.info(`获取每日交易信息`);
-      const data = await this.fetch(
-        `/testnet-v1/user/transactions/state/daily`,
-        "GET",
-        await this.getToken()
-      );
-
-      if (data.code === 0) {
-        this.dailyTx = data.data;
-        logger.info(`成功获取每日交易信息: ${JSON.stringify(this.dailyTx)}`);
-      } else {
-        throw new Error(`无法获取每日交易信息: ${data.message}`);
-      }
-    } catch (error) {
-      this.handleError(error, "获取每日交易信息");
-    }
-  }
-
-  // 签到
-  async checkIn() {
-    try {
-      logger.info(`尝试签到`);
-      await Helper.delay(1000, this.pk, `尝试签到`, this);
-
-      const checkInTxResponse = await this.fetch(
-        `/testnet-v1/user/check-in/transaction`,
-        "GET",
-        await this.getToken()
-      );
-
-      if (checkInTxResponse.code === 0) {
-        const transactionBuffer = Buffer.from(checkInTxResponse.data.hash, "base64");
-        const transaction = Transaction.from(transactionBuffer);
-
-        const tx = await this.doTx(transaction);
-
-        logger.info(`签到交易成功，继续后续签到操作`);
-        await Helper.delay(1000, this.pk, `签到交易成功，继续后续签到操作`, this);
-
-        await this.fetch(`/testnet-v1/user/check-in`, "POST", this.token, { hash: tx });
-
-        logger.info(`签到完成`);
-      } else if (
-        checkInTxResponse.message &&
-        checkInTxResponse.message.includes("already checked in")
-      ) {
-        logger.info(`账户已签到，无需重复操作`);
-      } else {
-        throw new Error(`签到失败: ${checkInTxResponse.message}`);
-      }
-    } catch (error) {
-      this.handleError(error, "签到");
-    }
-  }
-
-  // 领取交易里程碑奖励
-  async claimTxMilestone(stage) {
-    try {
-      logger.info(`尝试领取交易里程碑奖励: 阶段 ${stage}`);
-      await Helper.delay(DELAY_MS, this.pk, `尝试领取交易里程碑奖励: 阶段 ${stage}`, this);
-
-      const data = await this.fetch(
-        `/testnet-v1/user/transactions/rewards/claim`,
-        "POST",
-        await this.getToken(),
-        { stage }
-      );
-
-      if (data.code === 0) {
-        logger.info(`成功领取阶段 ${stage} 的交易里程碑奖励`);
-      } else if (data.message && data.message.includes("already claimed")) {
-        logger.info(`阶段 ${stage} 的交易里程碑奖励已领取，跳过操作`);
-      } else {
-        throw new Error(`领取交易里程碑奖励失败: ${data.message}`);
-      }
-    } catch (error) {
-      this.handleError(error, `领取阶段 ${stage} 的交易里程碑奖励`);
-    }
-  }
-
-  // 执行交易
-  async doTx(transaction) {
-    try {
-      logger.info(`执行交易 ${JSON.stringify(transaction)}`);
-      const tx = await sendAndConfirmTransaction(this.connection, transaction, [
+      logger.info(`Execute Transaction ${JSON.stringify(trans)}`);
+      const tx = await sendAndConfirmTransaction(this.connection, trans, [
         this.wallet,
       ]);
-      logger.info(`交易链接: https://explorer.sonic.game/tx/${tx}`);
-      await Helper.delay(DELAY_MS, this.pk, `交易链接: https://explorer.sonic.game/tx/${tx}`, this);
+      logger.info(`Tx Url: https://explorer.sonic.game/tx/${tx}`);
+      await Helper.delay(
+        1000,
+        this.pk,
+        `Tx Url: https://explorer.sonic.game/tx/${tx}`,
+        this
+      );
       return tx;
     } catch (error) {
-      this.handleError(error, "执行交易");
+      logger.error(`Transaction failed: ${error.message}`, error);
+      throw error;
     }
+  }
+
+  /** @param {Transaction} trans */
+  async doRawTx(trans) {
+    try {
+      logger.info(`Execute Raw Transaction ${JSON.stringify(trans)}`);
+      const rawTransaction = trans.serialize();
+      const tx = await this.connection.sendRawTransaction(rawTransaction);
+      await this.confirmTx(tx);
+      logger.info(`Tx Url: https://explorer.sonic.game/tx/${tx}`);
+      await Helper.delay(
+        1000,
+        this.pk,
+        `Tx Url: https://explorer.sonic.game/tx/${tx}`,
+        this
+      );
+      return tx;
+    } catch (error) {
+      logger.error(`Transaction failed: ${error.message}`, error);
+      throw error;
+    }
+  }
+
+  /** @param {Transaction} trans */
+  async confirmTx(signature) {
+    try {
+      logger.info(`Confirming Transaction...`);
+      await Helper.delay(
+        2000,
+        this.pk,
+        `Confirming Transaction, Estimated take 30 Seconds..`,
+        this
+      );
+      await this.connection.confirmTransaction(signature, "finalized");
+
+      logger.info(`Transaction Confirmed`);
+      await Helper.delay(2000, this.pk, `Transaction Confirmed`, this);
+    } catch (error) {
+      logger.error(`Transaction failed: ${error.message}`, error);
+      if (this.currentError < Config.maxRetry) {
+        this.currentError += 1;
+        await Helper.delay(
+          2000,
+          this.pk,
+          `Transaction Not Confirmed after 30 Second, Retrying...`,
+          this
+        );
+        await this.confirmTx(signature);
+      } else {
+        this.currentError = 0;
+        await Helper.delay(
+          2000,
+          this.pk,
+          `Transaction not confirmed and max retry reached`,
+          this
+        );
+        throw Error("Transaction not confirmed and max retry reached");
+      }
+    }
+  }
+
+  async sendSolToAddress() {
+    try {
+      const destAddress =
+        Config.destAddress[Helper.random(0, Config.destAddress.length - 1)] ??
+        this.address;
+      const amount = Config.sendAmount;
+      logger.info(`Sending ${amount} to ${destAddress}`);
+      await Helper.delay(
+        1000,
+        this.pk,
+        `Sending ${amount} to ${destAddress}`,
+        this
+      );
+      const transferInstruction = SystemProgram.transfer({
+        fromPubkey: this.address,
+        toPubkey: destAddress,
+        lamports: amount * LAMPORTS_PER_SOL,
+      });
+      const transaction = new Transaction().add(transferInstruction);
+      await this.doTx(transaction)
+        .then(async () => {
+          await this.checkBalance();
+        })
+        .catch((err) => {
+          throw err;
+        });
+      this.dailyTx.total_transactions += 1;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async checkIn() {
+    logger.info(`Try to Check-in`);
+    await Helper.delay(1000, this.pk, `Try to Check-in`, this);
+    await this.fetch(
+      `/testnet-v1/user/check-in/transaction`,
+      "GET",
+      this.token,
+      null
+    )
+      .then(async (data) => {
+        if (data.code == 0) {
+          const transactionBuffer = Buffer.from(data.data.hash, "base64");
+          const transaction = Transaction.from(transactionBuffer);
+
+          const tx = await this.doTx(transaction);
+
+          logger.info(
+            `Check-in Transaction Executed Successfully, continue with post check in process`
+          );
+          await Helper.delay(
+            1000,
+            this.pk,
+            `Check-in Transaction Executed Successfully, continue with post check in process`,
+            this
+          );
+          this.dailyTx.total_transactions += 1;
+          await this.postCheckIn(tx);
+        } else {
+          await Helper.delay(1000, this.pk, data.message, this);
+        }
+      })
+      .catch((err) => {
+        throw err;
+      });
+  }
+
+  async postCheckIn(tx) {
+    await Helper.delay(1000, this.pk, `Execute post check in process`, this);
+    await this.fetch(`/testnet-v1/user/check-in`, "POST", this.token, {
+      hash: tx,
+    })
+      .then(async (data) => {
+        if (data.code != 0) {
+          throw new Error(data.message);
+        } else {
+          await Helper.delay(1000, this.pk, "Checked in Successfully", this);
+        }
+      })
+      .catch((err) => {
+        throw err;
+      });
+  }
+
+  async getRewardInfo() {
+    try {
+      await Helper.delay(1000, this.pk, `Getting Reward Information`, this);
+      await this.fetch("/testnet-v1/user/rewards/info", "GET", this.token)
+        .then(async (data) => {
+          if (data.code == 0) {
+            this.reward = data.data;
+            await Helper.delay(
+              1000,
+              this.pk,
+              `Successfully Get User Reward Information`,
+              this
+            );
+          } else {
+            throw new Error("Unable to get user reward info");
+          }
+        })
+        .catch((err) => {
+          throw err;
+        });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async getDailyTx() {
+    try {
+      await Helper.delay(1000, this.pk, `Getting Daily Tx Info`, this);
+      await this.fetch(
+        `/testnet-v1/user/transactions/state/daily`,
+        "GET",
+        this.token,
+        null
+      )
+        .then(async (data) => {
+          if (data.code != 0) {
+            throw new Error(data.message);
+          } else {
+            this.dailyTx = data.data;
+            await Helper.delay(
+              1000,
+              this.pk,
+              `Successfully Get Daily Tx Information`,
+              this
+            );
+          }
+        })
+        .catch((err) => {
+          throw err;
+        });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async claimTxMilestone(stage) {
+    logger.info(`Claiming Tx Milestone Stage ${stage}`);
+    await Helper.delay(
+      1000,
+      this.pk,
+      `Claiming Tx Milestone Stage ${stage}`,
+      this
+    );
+    await this.fetch(
+      `/testnet-v1/user/transactions/rewards/claim`,
+      "POST",
+      this.token,
+      {
+        stage: stage,
+      }
+    )
+      .then(async (data) => {
+        if (data.code == 0) {
+          await Helper.delay(1000, this.pk, `Claimed Successfully`, this);
+        } else {
+          await Helper.delay(1000, this.pk, data.message, this);
+        }
+      })
+      .catch((err) => {
+        throw err;
+      });
+  }
+
+  async claimMysteryBox() {
+    await Helper.delay(
+      1000,
+      this.pk,
+      `Build Tx for Claiming Mystery BOX`,
+      this
+    );
+    logger.info(`Build Tx for Claiming Mystery BOX`);
+    await this.fetch(
+      "/testnet-v1/user/rewards/mystery-box/build-tx",
+      "GET",
+      this.token,
+      undefined
+    )
+      .then(async (data) => {
+        if (data.code == 0) {
+          const transactionBuffer = Buffer.from(data.data.hash, "base64");
+          const transaction = Transaction.from(transactionBuffer);
+          transaction.partialSign(this.wallet);
+          const tx = await this.doRawTx(transaction);
+          await this.openMysteryBox(tx);
+        } else {
+          await Helper.delay(1000, this.pk, data.message, this);
+          logger.error(data.message);
+        }
+      })
+      .catch((err) => {
+        throw err;
+      });
+  }
+
+  async openMysteryBox(hash) {
+    await Helper.delay(1000, this.pk, `Opening Mystery Box`, this);
+    logger.info(`Opening Mystery Box`);
+    await this.fetch("/user/rewards/mystery-box/open", "POST", this.token, {
+      hash: hash,
+    })
+      .then(async (data) => {
+        if (data.code == 0) {
+          await Helper.delay(
+            3000,
+            this.pk,
+            `Successfully open mystery box got ${data.data.amount} RING`,
+            this
+          );
+        } else {
+          await Helper.delay(1000, this.pk, data.message, this);
+          logger.error(data.message);
+        }
+      })
+      .catch((err) => {
+        throw err;
+      });
   }
 }
